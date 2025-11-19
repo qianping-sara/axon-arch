@@ -1,0 +1,40 @@
+# Production Environment Configuration
+
+spring:
+  # PostgreSQL Database for Production
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/atam_prod}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  
+  h2:
+    console:
+      enabled: false
+
+# Spring AI Configuration
+#  ai:
+#    openai:
+#      api-key: ${OPENAI_API_KEY}
+#      chat:
+#        options:
+#          model: gpt-4
+#          temperature: 0.5
+#          max-tokens: 2000
+
+# Logging
+logging:
+  level:
+    com.atam: INFO
+    org.springframework.web: WARN
+    org.hibernate: WARN
+
