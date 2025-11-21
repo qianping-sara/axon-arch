@@ -209,21 +209,44 @@ curl -X POST http://localhost:8080/api/v1/business-drivers/extract \
 - ✅ Frontend controls file lifecycle
 - ✅ Better separation of concerns
 
-#### Legacy Approach: Upload and Extract in One Step (Deprecated)
+### Architecture Pattern and Smell Analysis
 
-For backward compatibility, you can still upload and extract in a single request:
+The platform can identify architecture patterns and potential issues (smells) from architecture documents.
+
+**Step 1: Upload PDF Files** (same as above)
 
 ```bash
-# Streaming
-curl -X POST http://localhost:8080/api/v1/business-drivers/extract/stream/upload \
-  -F "files=@architecture-doc.pdf"
-
-# Synchronous
-curl -X POST http://localhost:8080/api/v1/business-drivers/extract/upload \
+curl -X POST http://localhost:8080/api/v1/files/upload \
   -F "files=@architecture-doc.pdf"
 ```
 
-**Note**: This approach is deprecated and will be removed in future versions. Please migrate to the decoupled approach.
+**Step 2: Analyze Architecture (Streaming)**
+
+```bash
+curl -X POST http://localhost:8080/api/v1/architecture/analyze/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fileUris": [
+      "https://generativelanguage.googleapis.com/v1beta/files/abc123"
+    ]
+  }'
+```
+
+**Step 2 (Alternative): Analyze Architecture (Synchronous)**
+
+```bash
+curl -X POST http://localhost:8080/api/v1/architecture/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fileUris": [
+      "https://generativelanguage.googleapis.com/v1beta/files/abc123"
+    ]
+  }'
+```
+
+**Output**: Markdown format with:
+- Architecture Patterns (e.g., BFF, Strangler Fig, CQRS, Event-Driven)
+- Architecture Smells (e.g., Phantom Dependency, Data Consistency Risk, Tight Coupling)
 
 ### File Reuse Example
 
@@ -240,10 +263,15 @@ curl -X POST http://localhost:8080/api/v1/business-drivers/extract/stream \
   -H "Content-Type: application/json" \
   -d "{\"fileUris\": [\"$FILE_URI\"]}"
 
-# 4. Reuse with Architecture Design Agent (future)
+# 4. Reuse with Architecture Design Agent
 curl -X POST http://localhost:8080/api/v1/architecture/analyze/stream \
   -H "Content-Type: application/json" \
   -d "{\"fileUris\": [\"$FILE_URI\"]}"
+
+# 5. Future: Reuse with Risk Analysis Agent
+# curl -X POST http://localhost:8080/api/v1/risks/analyze/stream \
+#   -H "Content-Type: application/json" \
+#   -d "{\"fileUris\": [\"$FILE_URI\"]}"
 ```
 
 ## 📖 API Documentation
