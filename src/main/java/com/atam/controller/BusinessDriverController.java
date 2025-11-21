@@ -1,6 +1,9 @@
 package com.atam.controller;
 
 import com.atam.agents.business.BusinessDriverAgent;
+import com.atam.dto.ExtractRequest;
+import com.atam.dto.FileMetadata;
+import com.atam.tools.document.GeminiFileUploadTool;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,7 +15,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,23 +46,60 @@ public class BusinessDriverController {
     private static final Logger logger = LoggerFactory.getLogger(BusinessDriverController.class);
 
     private final BusinessDriverAgent businessDriverAgent;
+    private final GeminiFileUploadTool fileUploadTool;
 
-    public BusinessDriverController(BusinessDriverAgent businessDriverAgent) {
+    public BusinessDriverController(
+        BusinessDriverAgent businessDriverAgent,
+        GeminiFileUploadTool fileUploadTool
+    ) {
         this.businessDriverAgent = businessDriverAgent;
+        this.fileUploadTool = fileUploadTool;
     }
 
     /**
-     * 流式提取业务驱动因素
-     * 
-     * @param files PDF 文件列表（支持多文件上传）
+     * 流式提取业务驱动因素（使用已上传文件的 URI）
+     *
+     * @param request 包含已上传文件 URI 列表的请求
      * @return 流式 Markdown 输出
      */
     @PostMapping(value = "/extract/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(
-        summary = "流式提取业务驱动因素",
-        description = "上传 PDF 文档，流式输出 Markdown 格式的业务驱动因素提取结果。支持多文件上传。"
+        summary = "流式提取业务驱动因素（推荐）",
+        description = "使用已上传文件的 URI 进行业务驱动因素提取，流式输出 Markdown 格式结果。" +
+                     "文件需先通过 /api/v1/files/upload 接口上传。支持文件复用。"
     )
     public Flux<String> extractBusinessDriversStream(
+        @RequestBody ExtractRequest request
+    ) {
+        logger.info("Received stream extraction request with {} file URIs", request.fileUris().size());
+
+        // Validate request
+        try {
+            request.validate();
+        } catch (IllegalArgumentException e) {
+            logger.warn("Invalid request: {}", e.getMessage());
+            return Flux.error(e);
+        }
+
+        // Call Agent with file URIs
+        return businessDriverAgent.extractBusinessDriversStream(request.fileUris());
+    }
+
+    /**
+     * 流式提取业务驱动因素（上传 + 提取一步完成）
+     *
+     * @param files PDF 文件列表（支持多文件上传）
+     * @return 流式 Markdown 输出
+     * @deprecated 推荐使用分离的上传和提取接口，以支持文件复用
+     */
+    @Deprecated
+    @PostMapping(value = "/extract/stream/upload", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(
+        summary = "流式提取业务驱动因素（上传 + 提取）",
+        description = "上传 PDF 文档并流式输出 Markdown 格式的业务驱动因素提取结果。" +
+                     "此接口已废弃，推荐先调用 /api/v1/files/upload 上传文件，再调用 /extract/stream 进行提取。"
+    )
+    public Flux<String> extractBusinessDriversStreamWithUpload(
         @Parameter(description = "PDF 文件列表（最多 5 个文件，每个文件最大 50MB）")
         @RequestParam("files") List<MultipartFile> files
     ) {
@@ -94,35 +133,89 @@ public class BusinessDriverController {
         List<String> tempFilePaths = new ArrayList<>();
 
         try {
-            // Save uploaded files to temp directory
+            // 1. Save uploaded files to temp directory
             for (MultipartFile file : files) {
                 String tempFilePath = saveToTempDirectory(file);
                 tempFilePaths.add(tempFilePath);
             }
 
-            // Call agent for streaming extraction
-            return businessDriverAgent.extractBusinessDriversStream(tempFilePaths);
+            // 2. Upload to Gemini Files API
+            List<com.google.genai.types.File> uploadedFiles = fileUploadTool.uploadPdfFiles(tempFilePaths);
+            logger.info("Uploaded {} files to Gemini Files API", uploadedFiles.size());
 
-        } catch (IOException e) {
-            logger.error("Failed to save uploaded files", e);
+            // 3. Extract file URIs
+            List<String> fileUris = uploadedFiles.stream()
+                .map(f -> f.uri().orElseThrow(() -> new RuntimeException("File URI is missing")))
+                .toList();
+
+            // 4. Call agent for streaming extraction
+            return businessDriverAgent.extractBusinessDriversStream(fileUris)
+                .doFinally(signalType -> {
+                    // Cleanup temp files after stream completes
+                    fileUploadTool.cleanupTempFiles(tempFilePaths);
+                    logger.debug("Cleaned up {} temp files", tempFilePaths.size());
+                });
+
+        } catch (Exception e) {
+            logger.error("Failed to process uploaded files", e);
             // Cleanup temp files on error
-            cleanupTempFiles(tempFilePaths);
+            fileUploadTool.cleanupTempFiles(tempFilePaths);
             return Flux.error(new RuntimeException("Failed to process uploaded files", e));
         }
     }
 
     /**
-     * 同步提取业务驱动因素
-     * 
-     * @param files PDF 文件列表
+     * 同步提取业务驱动因素（使用已上传文件的 URI）
+     *
+     * @param request 包含已上传文件 URI 列表的请求
      * @return 完整的 Markdown 输出
      */
-    @PostMapping(value = "/extract", produces = MediaType.TEXT_PLAIN_VALUE)
+    @PostMapping(value = "/extract", produces = MediaType.TEXT_PLAIN_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
-        summary = "同步提取业务驱动因素",
-        description = "上传 PDF 文档，返回完整的 Markdown 格式业务驱动因素提取结果。"
+        summary = "同步提取业务驱动因素（推荐）",
+        description = "使用已上传文件的 URI 进行业务驱动因素提取，返回完整的 Markdown 格式结果。" +
+                     "文件需先通过 /api/v1/files/upload 接口上传。支持文件复用。"
     )
     public ResponseEntity<String> extractBusinessDrivers(
+        @RequestBody ExtractRequest request
+    ) {
+        logger.info("Received sync extraction request with {} file URIs", request.fileUris().size());
+
+        // Validate request
+        try {
+            request.validate();
+        } catch (IllegalArgumentException e) {
+            logger.warn("Invalid request: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+
+        try {
+            // Call Agent with file URIs
+            String result = businessDriverAgent.extractBusinessDrivers(request.fileUris());
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            logger.error("Failed to extract business drivers", e);
+            return ResponseEntity.internalServerError()
+                .body("Failed to extract business drivers: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 同步提取业务驱动因素（上传 + 提取一步完成）
+     *
+     * @param files PDF 文件列表
+     * @return 完整的 Markdown 输出
+     * @deprecated 推荐使用分离的上传和提取接口，以支持文件复用
+     */
+    @Deprecated
+    @PostMapping(value = "/extract/upload", produces = MediaType.TEXT_PLAIN_VALUE)
+    @Operation(
+        summary = "同步提取业务驱动因素（上传 + 提取）",
+        description = "上传 PDF 文档并返回完整的 Markdown 格式业务驱动因素提取结果。" +
+                     "此接口已废弃，推荐先调用 /api/v1/files/upload 上传文件，再调用 /extract 进行提取。"
+    )
+    public ResponseEntity<String> extractBusinessDriversWithUpload(
         @Parameter(description = "PDF 文件列表（最多 5 个文件，每个文件最大 50MB）")
         @RequestParam("files") List<MultipartFile> files
     ) {
@@ -156,21 +249,34 @@ public class BusinessDriverController {
         List<String> tempFilePaths = new ArrayList<>();
 
         try {
-            // Save uploaded files to temp directory
+            // 1. Save uploaded files to temp directory
             for (MultipartFile file : files) {
                 String tempFilePath = saveToTempDirectory(file);
                 tempFilePaths.add(tempFilePath);
             }
 
-            // Call agent for synchronous extraction
-            String result = businessDriverAgent.extractBusinessDrivers(tempFilePaths);
+            // 2. Upload to Gemini Files API
+            List<com.google.genai.types.File> uploadedFiles = fileUploadTool.uploadPdfFiles(tempFilePaths);
+            logger.info("Uploaded {} files to Gemini Files API", uploadedFiles.size());
+
+            // 3. Extract file URIs
+            List<String> fileUris = uploadedFiles.stream()
+                .map(f -> f.uri().orElseThrow(() -> new RuntimeException("File URI is missing")))
+                .toList();
+
+            // 4. Call agent for synchronous extraction
+            String result = businessDriverAgent.extractBusinessDrivers(fileUris);
+
+            // 5. Cleanup temp files
+            fileUploadTool.cleanupTempFiles(tempFilePaths);
+            logger.debug("Cleaned up {} temp files", tempFilePaths.size());
 
             return ResponseEntity.ok(result);
 
         } catch (Exception e) {
             logger.error("Failed to extract business drivers", e);
             // Cleanup temp files on error
-            cleanupTempFiles(tempFilePaths);
+            fileUploadTool.cleanupTempFiles(tempFilePaths);
             return ResponseEntity.internalServerError()
                 .body("Failed to extract business drivers: " + e.getMessage());
         }
@@ -198,20 +304,5 @@ public class BusinessDriverController {
         return targetPath.toString();
     }
 
-    /**
-     * 清理临时文件
-     */
-    private void cleanupTempFiles(List<String> filePaths) {
-        for (String filePath : filePaths) {
-            try {
-                File file = new File(filePath);
-                if (file.exists() && file.delete()) {
-                    logger.debug("Deleted temp file: {}", filePath);
-                }
-            } catch (Exception e) {
-                logger.warn("Failed to delete temp file: {}", filePath, e);
-            }
-        }
-    }
 }
 

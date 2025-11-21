@@ -1,5 +1,6 @@
 package com.atam.agents.business;
 
+import com.atam.tools.document.GeminiFileUploadTool;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,6 +32,9 @@ class BusinessDriverAgentTest {
     @Autowired
     private BusinessDriverAgent businessDriverAgent;
 
+    @Autowired
+    private GeminiFileUploadTool fileUploadTool;
+
     @Test
     void testAgentInitialization() {
         // Verify agent is properly initialized
@@ -41,22 +45,30 @@ class BusinessDriverAgentTest {
     void testPromptTemplateLoading() throws IOException {
         // This test verifies that the prompt template can be loaded
         // We'll test this indirectly through the agent's methods
-        
+
         // Create a simple test file
         Path tempFile = createTestPdfFile("test-simple.pdf");
-        
+
         try {
-            // Call agent (will load prompt template internally)
-            String result = businessDriverAgent.extractBusinessDrivers(List.of(tempFile.toString()));
-            
+            // 1. Upload file to Gemini Files API
+            List<com.google.genai.types.File> uploadedFiles = fileUploadTool.uploadPdfFiles(List.of(tempFile.toString()));
+            assertThat(uploadedFiles).hasSize(1);
+
+            // 2. Extract file URI
+            String fileUri = uploadedFiles.get(0).uri().orElseThrow();
+            System.out.println("Uploaded file URI: " + fileUri);
+
+            // 3. Call agent with file URI (will load prompt template internally)
+            String result = businessDriverAgent.extractBusinessDrivers(List.of(fileUri));
+
             // Verify result is not null
             assertThat(result).isNotNull();
-            
+
             System.out.println("Extraction Result Length: " + result.length());
-            
+
         } finally {
             // Cleanup
-            Files.deleteIfExists(tempFile);
+            fileUploadTool.cleanupTempFiles(List.of(tempFile.toString()));
         }
     }
 
@@ -75,16 +87,23 @@ class BusinessDriverAgentTest {
         Files.copy(pdfResource.getInputStream(), tempPdf, StandardCopyOption.REPLACE_EXISTING);
 
         try {
-            // Call agent for synchronous extraction
-            String result = businessDriverAgent.extractBusinessDrivers(List.of(tempPdf.toString()));
+            // 1. Upload file to Gemini Files API
+            List<com.google.genai.types.File> uploadedFiles = fileUploadTool.uploadPdfFiles(List.of(tempPdf.toString()));
+            assertThat(uploadedFiles).hasSize(1);
+
+            // 2. Extract file URI
+            String fileUri = uploadedFiles.get(0).uri().orElseThrow();
+
+            // 3. Call agent for synchronous extraction
+            String result = businessDriverAgent.extractBusinessDrivers(List.of(fileUri));
 
             // Verify result
             assertThat(result).isNotNull();
             assertThat(result).isNotEmpty();
-            
+
             // Verify Markdown format
             assertThat(result).contains("#"); // Should contain headers
-            
+
             // Verify key sections
             assertThat(result.toLowerCase()).containsAnyOf(
                 "business objective", "业务目标",
@@ -99,7 +118,7 @@ class BusinessDriverAgentTest {
 
         } finally {
             // Cleanup
-            Files.deleteIfExists(tempPdf);
+            fileUploadTool.cleanupTempFiles(List.of(tempPdf.toString()));
         }
     }
 
@@ -118,8 +137,15 @@ class BusinessDriverAgentTest {
         Files.copy(pdfResource.getInputStream(), tempPdf, StandardCopyOption.REPLACE_EXISTING);
 
         try {
-            // Call agent for streaming extraction
-            Flux<String> resultStream = businessDriverAgent.extractBusinessDriversStream(List.of(tempPdf.toString()));
+            // 1. Upload file to Gemini Files API
+            List<com.google.genai.types.File> uploadedFiles = fileUploadTool.uploadPdfFiles(List.of(tempPdf.toString()));
+            assertThat(uploadedFiles).hasSize(1);
+
+            // 2. Extract file URI
+            String fileUri = uploadedFiles.get(0).uri().orElseThrow();
+
+            // 3. Call agent for streaming extraction
+            Flux<String> resultStream = businessDriverAgent.extractBusinessDriversStream(List.of(fileUri));
 
             // Collect all chunks
             StringBuilder fullResult = new StringBuilder();
@@ -143,7 +169,7 @@ class BusinessDriverAgentTest {
 
         } finally {
             // Cleanup
-            Files.deleteIfExists(tempPdf);
+            fileUploadTool.cleanupTempFiles(List.of(tempPdf.toString()));
         }
     }
 
@@ -154,10 +180,19 @@ class BusinessDriverAgentTest {
         Path tempFile2 = createTestPdfFile("test-multi-2.pdf");
 
         try {
-            // Call agent with multiple files
-            String result = businessDriverAgent.extractBusinessDrivers(
+            // 1. Upload files to Gemini Files API
+            List<com.google.genai.types.File> uploadedFiles = fileUploadTool.uploadPdfFiles(
                 List.of(tempFile1.toString(), tempFile2.toString())
             );
+            assertThat(uploadedFiles).hasSize(2);
+
+            // 2. Extract file URIs
+            List<String> fileUris = uploadedFiles.stream()
+                .map(f -> f.uri().orElseThrow())
+                .toList();
+
+            // 3. Call agent with multiple file URIs
+            String result = businessDriverAgent.extractBusinessDrivers(fileUris);
 
             // Verify result
             assertThat(result).isNotNull();
@@ -167,8 +202,7 @@ class BusinessDriverAgentTest {
 
         } finally {
             // Cleanup
-            Files.deleteIfExists(tempFile1);
-            Files.deleteIfExists(tempFile2);
+            fileUploadTool.cleanupTempFiles(List.of(tempFile1.toString(), tempFile2.toString()));
         }
     }
 

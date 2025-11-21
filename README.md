@@ -118,11 +118,13 @@ atam-copilot/
 
 - **Framework**: Spring Boot 3.2.0
 - **Language**: Java 17
-- **AI**: Spring AI 1.0.0-M4
+- **AI Framework**: Spring AI 1.1.0
+- **AI Model**: Google Gemini 2.5 Flash (via Gemini Developer API / Vertex AI)
+- **AI SDK**: Google GenAI Java SDK 1.28.0
 - **Database**: PostgreSQL (prod) / H2 (dev)
 - **Build Tool**: Maven
 - **API Documentation**: SpringDoc OpenAPI (Swagger)
-- **Document Processing**: Apache PDFBox, Apache POI
+- **Document Processing**: Gemini Files API (PDF, up to 50MB or 1,000 pages)
 
 ## 📝 Development
 
@@ -140,9 +142,108 @@ export SPRING_PROFILES_ACTIVE=dev
 
 ### Environment Variables
 
-For AI features, set your OpenAI API key:
+For AI features, set your Google API key:
 ```bash
-export OPENAI_API_KEY=your-api-key-here
+export GOOGLE_API_KEY=your-api-key-here
+```
+
+## 📖 API Usage
+
+### Business Driver Extraction
+
+The platform provides two approaches for extracting business drivers from PDF documents:
+
+#### Recommended Approach: Decoupled Upload and Extraction
+
+This approach allows file reuse across multiple agents and provides better control over the file lifecycle.
+
+**Step 1: Upload PDF Files**
+
+```bash
+curl -X POST http://localhost:8080/api/v1/files/upload \
+  -F "files=@architecture-doc.pdf" \
+  -F "files=@requirements.pdf"
+```
+
+Response:
+```json
+[
+  {
+    "fileId": "files/abc123",
+    "uri": "https://generativelanguage.googleapis.com/v1beta/files/abc123",
+    "displayName": "architecture-doc.pdf",
+    "sizeBytes": 1024000,
+    "mimeType": "application/pdf",
+    "state": "ACTIVE"
+  }
+]
+```
+
+**Step 2: Extract Business Drivers (Streaming)**
+
+```bash
+curl -X POST http://localhost:8080/api/v1/business-drivers/extract/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fileUris": [
+      "https://generativelanguage.googleapis.com/v1beta/files/abc123"
+    ]
+  }'
+```
+
+**Step 2 (Alternative): Extract Business Drivers (Synchronous)**
+
+```bash
+curl -X POST http://localhost:8080/api/v1/business-drivers/extract \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fileUris": [
+      "https://generativelanguage.googleapis.com/v1beta/files/abc123"
+    ]
+  }'
+```
+
+**Benefits**:
+- ✅ Upload files once, use with multiple agents (Business Driver, Architecture Design, Risk Analysis)
+- ✅ Files retained on Gemini servers for 48 hours
+- ✅ Frontend controls file lifecycle
+- ✅ Better separation of concerns
+
+#### Legacy Approach: Upload and Extract in One Step (Deprecated)
+
+For backward compatibility, you can still upload and extract in a single request:
+
+```bash
+# Streaming
+curl -X POST http://localhost:8080/api/v1/business-drivers/extract/stream/upload \
+  -F "files=@architecture-doc.pdf"
+
+# Synchronous
+curl -X POST http://localhost:8080/api/v1/business-drivers/extract/upload \
+  -F "files=@architecture-doc.pdf"
+```
+
+**Note**: This approach is deprecated and will be removed in future versions. Please migrate to the decoupled approach.
+
+### File Reuse Example
+
+```bash
+# 1. Upload once
+UPLOAD_RESPONSE=$(curl -X POST http://localhost:8080/api/v1/files/upload \
+  -F "files=@architecture-doc.pdf")
+
+# 2. Extract file URI
+FILE_URI=$(echo $UPLOAD_RESPONSE | jq -r '.[0].uri')
+
+# 3. Use with Business Driver Agent
+curl -X POST http://localhost:8080/api/v1/business-drivers/extract/stream \
+  -H "Content-Type: application/json" \
+  -d "{\"fileUris\": [\"$FILE_URI\"]}"
+
+# 4. Reuse with Architecture Design Agent (future)
+curl -X POST http://localhost:8080/api/v1/architecture/analyze/stream \
+  -H "Content-Type: application/json" \
+  -d "{\"fileUris\": [\"$FILE_URI\"]}"
 ```
 
 ## 📖 API Documentation
@@ -185,6 +286,6 @@ ATAM Copilot Team
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: 2025-11-19
+**Version**: 1.0.0
+**Last Updated**: 2025-11-21
 
