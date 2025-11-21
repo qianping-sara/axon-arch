@@ -10,6 +10,7 @@ import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -26,7 +27,11 @@ import java.util.List;
  *
  * <p>输出格式：Markdown（支持前端流式渲染）
  *
- * <p>对应 ATAM 步骤 2: Present Business Drivers
+ * <p>对应 ATAM 步骤:
+ * <ul>
+ *   <li>步骤 2: Present Business Drivers - 提取业务驱动因素</li>
+ *   <li>步骤 5: Generate Quality Attribute Utility Tree - 生成效用树草稿</li>
+ * </ul>
  *
  * <p><b>设计理念</b>：
  * <ul>
@@ -120,6 +125,81 @@ public class BusinessDriverAgent {
         } catch (IOException e) {
             logger.error("Failed to extract business drivers", e);
             throw new RuntimeException("Business driver extraction failed", e);
+        }
+    }
+
+    /**
+     * 流式生成效用树草稿
+     *
+     * <p>基于已批准的业务驱动因素（步骤 2 的输出），生成 ATAM 效用树草稿。
+     * 效用树将业务驱动因素映射为质量属性（L1/L2）和具体场景。
+     *
+     * @param businessDriversMarkdown 已批准的业务驱动因素（Markdown 格式）
+     * @return 流式 Markdown 输出（效用树表格）
+     */
+    public Flux<String> generateUtilityTreeDraftStream(String businessDriversMarkdown) {
+        logger.info("Starting streaming utility tree generation");
+
+        // Validate input
+        if (businessDriversMarkdown == null || businessDriversMarkdown.isBlank()) {
+            logger.error("No business drivers markdown provided");
+            return Flux.error(new IllegalArgumentException("Business drivers markdown is required"));
+        }
+
+        try {
+            // 1. Load Prompt template
+            String promptTemplate = loadPromptTemplate("utility-tree-generation-markdown.st");
+            logger.debug("Loaded utility tree prompt template: {} characters", promptTemplate.length());
+
+            // 2. 将业务驱动因素作为上下文注入 Prompt
+            String fullPrompt = promptTemplate + "\n\n## 已批准的业务驱动因素\n\n" + businessDriversMarkdown;
+            logger.debug("Constructed full prompt with business drivers context");
+
+            // 3. Call Gemini model (streaming output) - 不需要文件，只需要文本上下文
+            return geminiChatService.streamChat(fullPrompt, Collections.emptyList())
+                .doOnComplete(() -> logger.info("Streaming utility tree generation completed"))
+                .doOnError(error -> logger.error("Streaming utility tree generation failed", error));
+
+        } catch (IOException e) {
+            logger.error("Failed to load prompt template", e);
+            return Flux.error(e);
+        }
+    }
+
+    /**
+     * 同步生成效用树草稿（等待完整响应）
+     *
+     * <p>基于已批准的业务驱动因素（步骤 2 的输出），生成 ATAM 效用树草稿。
+     * 效用树将业务驱动因素映射为质量属性（L1/L2）和具体场景。
+     *
+     * @param businessDriversMarkdown 已批准的业务驱动因素（Markdown 格式）
+     * @return 完整的 Markdown 输出（效用树表格）
+     */
+    public String generateUtilityTreeDraft(String businessDriversMarkdown) {
+        logger.info("Starting synchronous utility tree generation");
+
+        // Validate input
+        if (businessDriversMarkdown == null || businessDriversMarkdown.isBlank()) {
+            logger.error("No business drivers markdown provided");
+            throw new IllegalArgumentException("Business drivers markdown is required");
+        }
+
+        try {
+            // 1. Load Prompt template
+            String promptTemplate = loadPromptTemplate("utility-tree-generation-markdown.st");
+
+            // 2. 将业务驱动因素作为上下文注入 Prompt
+            String fullPrompt = promptTemplate + "\n\n## 已批准的业务驱动因素\n\n" + businessDriversMarkdown;
+
+            // 3. Call Gemini model (synchronous) - 不需要文件，只需要文本上下文
+            String result = geminiChatService.chat(fullPrompt, Collections.emptyList());
+
+            logger.info("Synchronous utility tree generation completed: {} characters", result.length());
+            return result;
+
+        } catch (IOException e) {
+            logger.error("Failed to generate utility tree", e);
+            throw new RuntimeException("Utility tree generation failed", e);
         }
     }
 

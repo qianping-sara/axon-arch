@@ -248,6 +248,68 @@ curl -X POST http://localhost:8080/api/v1/architecture/analyze \
 - Architecture Patterns (e.g., BFF, Strangler Fig, CQRS, Event-Driven)
 - Architecture Smells (e.g., Phantom Dependency, Data Consistency Risk, Tight Coupling)
 
+### Utility Tree Generation
+
+The platform can automatically generate ATAM Utility Tree drafts based on approved business drivers. This maps business drivers to quality attributes (L1/L2) and specific scenarios.
+
+**Prerequisites**: You must first extract business drivers (see above) and have them approved by stakeholders.
+
+**Step 1: Extract Business Drivers** (see Business Driver Extraction section above)
+
+The output will be in Markdown format, for example:
+
+```markdown
+## 业务目标 (Business Objectives)
+| ID | 目标类别 | 详细描述 | 目标值/测量 | 业务价值/影响 | 优先级 |
+|:---|:---------|:---------|:------------|:--------------|:-------|
+| BO-1 | 提升自动化率 | 实现 40% Full STP | 40% | 减少成本 | High |
+
+## 关键非功能性需求 (NFRs)
+| ID | 属性 | 详细技术要求 | 关键目的/业务价值 | 测量标准 |
+|:---|:-----|:-------------|:------------------|:---------|
+| NFR-1 | 性能 | 处理时间 < 5分钟 | 提升体验 | - 时间 < 5分钟 |
+```
+
+**Step 2: User Reviews and Approves** the business drivers
+
+**Step 3: Generate Utility Tree (Streaming)**
+
+```bash
+curl -X POST http://localhost:8080/api/v1/business-drivers/utility-tree/generate/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "businessDriversMarkdown": "## 业务目标 (Business Objectives)\n| ID | 目标类别 | 详细描述 | 目标值/测量 | 业务价值/影响 | 优先级 |\n|:---|:---------|:---------|:------------|:--------------|:-------|\n| BO-1 | 提升自动化率 | 实现 40% Full STP | 40% | 减少成本 | High |\n\n## 关键非功能性需求 (NFRs)\n| ID | 属性 | 详细技术要求 | 关键目的/业务价值 | 测量标准 |\n|:---|:-----|:-------------|:------------------|:---------|\n| NFR-1 | 性能 | 处理时间 < 5分钟 | 提升体验 | - 时间 < 5分钟 |"
+  }'
+```
+
+**Step 3 (Alternative): Generate Utility Tree (Synchronous)**
+
+```bash
+curl -X POST http://localhost:8080/api/v1/business-drivers/utility-tree/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "businessDriversMarkdown": "<approved business drivers markdown from step 1>"
+  }'
+```
+
+**Output**: Markdown format with ATAM Utility Tree:
+
+```markdown
+## ATAM 效用树草稿 (Utility Tree Draft)
+
+| 质量属性 (L1) | 属性细化 (L2) | 场景描述 (Scenarios) | 优先级 (Value, Risk) | 对应的业务驱动 |
+|:---|:---|:---|:---|:---|
+| 性能效率 | 直通处理延迟 | (A1) 数字渠道提交符合"快速理赔"标准的案件时，系统在无需人工干预的情况下完成从受理到支付的端到端处理。 | (H, H) | BO-1: 实现 40% Full STP |
+| 可靠性 | 故障恢复 | (C1) 在 Full STP 执行过程中，若核心系统接口超时或不可用，系统能够自动捕获异常并将案件无缝路由至人工处理队列。 | (H, M) | NFR-1: 系统故障时自动降级 |
+```
+
+**Key Features**:
+- ✅ Maps business drivers to quality attributes (Performance, Reliability, Modifiability, etc.)
+- ✅ Generates specific scenarios with IDs (A1, B1, C1, etc.)
+- ✅ Evaluates priority as (Business Value, Architecture Risk)
+- ✅ Maintains traceability to original business drivers
+- ✅ Corresponds to ATAM Step 5: Generate Quality Attribute Utility Tree
+
 ### File Reuse Example
 
 ```bash
@@ -258,21 +320,34 @@ UPLOAD_RESPONSE=$(curl -X POST http://localhost:8080/api/v1/files/upload \
 # 2. Extract file URI
 FILE_URI=$(echo $UPLOAD_RESPONSE | jq -r '.[0].uri')
 
-# 3. Use with Business Driver Agent
-curl -X POST http://localhost:8080/api/v1/business-drivers/extract/stream \
+# 3. Use with Business Driver Agent (ATAM Step 2)
+BUSINESS_DRIVERS=$(curl -X POST http://localhost:8080/api/v1/business-drivers/extract \
   -H "Content-Type: application/json" \
-  -d "{\"fileUris\": [\"$FILE_URI\"]}"
+  -d "{\"fileUris\": [\"$FILE_URI\"]}")
 
-# 4. Reuse with Architecture Design Agent
+# 4. Reuse with Architecture Design Agent (ATAM Step 3-4)
 curl -X POST http://localhost:8080/api/v1/architecture/analyze/stream \
   -H "Content-Type: application/json" \
   -d "{\"fileUris\": [\"$FILE_URI\"]}"
 
-# 5. Future: Reuse with Risk Analysis Agent
+# 5. Generate Utility Tree (ATAM Step 5)
+# After user reviews and approves business drivers
+curl -X POST http://localhost:8080/api/v1/business-drivers/utility-tree/generate/stream \
+  -H "Content-Type: application/json" \
+  -d "{\"businessDriversMarkdown\": \"$BUSINESS_DRIVERS\"}"
+
+# 6. Future: Reuse with Risk Analysis Agent (ATAM Step 6)
 # curl -X POST http://localhost:8080/api/v1/risks/analyze/stream \
 #   -H "Content-Type: application/json" \
 #   -d "{\"fileUris\": [\"$FILE_URI\"]}"
 ```
+
+**Complete ATAM Workflow**:
+1. **Upload** files once → Get `fileUris`
+2. **Extract** business drivers (Step 2) → User reviews and approves
+3. **Analyze** architecture patterns and smells (Step 3-4)
+4. **Generate** utility tree from approved business drivers (Step 5)
+5. **Analyze** risks based on utility tree scenarios (Step 6) - Coming soon
 
 ## 📖 API Documentation
 
