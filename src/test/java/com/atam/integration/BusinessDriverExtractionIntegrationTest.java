@@ -1,11 +1,9 @@
 package com.atam.integration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
@@ -13,10 +11,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -37,160 +31,6 @@ class BusinessDriverExtractionIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @Test
-    void testSyncExtractionWithUploadEndpoint() throws Exception {
-        // Test the deprecated endpoint that uploads and extracts in one step
-        MockMultipartFile file = createTestPdfFile("test-sync.pdf");
-
-        // Call deprecated sync extraction endpoint (upload + extract)
-        MvcResult result = mockMvc.perform(multipart("/api/v1/business-drivers/extract/upload")
-                .file(file))
-            .andExpect(status().isOk())
-            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
-            .andReturn();
-
-        // Verify response
-        String response = result.getResponse().getContentAsString();
-        assertThat(response).isNotNull();
-        assertThat(response).isNotEmpty();
-
-        System.out.println("=== Sync Extraction Response (Deprecated Endpoint) ===");
-        System.out.println(response);
-        System.out.println("=== End of Response ===");
-    }
-
-    @Test
-    void testStreamExtractionWithUploadEndpoint() throws Exception {
-        // Test the deprecated endpoint that uploads and streams in one step
-        MockMultipartFile file = createTestPdfFile("test-stream.pdf");
-
-        // Call deprecated stream extraction endpoint (upload + extract)
-        // Note: MockMvc has limitations with Flux<String> streaming responses
-        // In test environment, the response may be empty because the stream is not fully consumed
-        // We just verify the endpoint returns 200 OK status
-        mockMvc.perform(multipart("/api/v1/business-drivers/extract/stream/upload")
-                .file(file))
-            .andExpect(status().isOk());
-
-        // Note: To properly test streaming, we would need to use WebTestClient or TestRestTemplate
-        // For now, we just verify the endpoint is accessible and returns success status
-    }
-
-    @Test
-    void testExtractionWithRealPdf() throws Exception {
-        // Test the deprecated endpoint with real PDF
-        ClassPathResource pdfResource = new ClassPathResource("test-data/Architecture_Review_Revival_V3.3.pdf");
-
-        if (!pdfResource.exists()) {
-            System.out.println("Test PDF not found in resources, skipping test");
-            return;
-        }
-
-        byte[] pdfContent = pdfResource.getInputStream().readAllBytes();
-        MockMultipartFile file = new MockMultipartFile(
-            "files",
-            "Architecture_Review_Revival_V3.3.pdf",
-            "application/pdf",
-            pdfContent
-        );
-
-        // Call deprecated sync extraction endpoint (upload + extract)
-        MvcResult result = mockMvc.perform(multipart("/api/v1/business-drivers/extract/upload")
-                .file(file))
-            .andExpect(status().isOk())
-            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
-            .andReturn();
-
-        // Verify response
-        String response = result.getResponse().getContentAsString();
-        assertThat(response).isNotNull();
-        assertThat(response).isNotEmpty();
-
-        // Verify Markdown format
-        assertThat(response).contains("#");
-
-        // Verify key sections
-        assertThat(response.toLowerCase()).containsAnyOf(
-            "business", "objective", "constraint", "nfr"
-        );
-
-        System.out.println("=== Real PDF Extraction Result (Deprecated Endpoint) ===");
-        System.out.println(response);
-        System.out.println("=== End of Result ===");
-        System.out.println("Total Length: " + response.length() + " characters");
-    }
-
-    @Test
-    void testExtractionWithMultipleFiles() throws Exception {
-        // Test deprecated endpoint with multiple files
-        MockMultipartFile file1 = createTestPdfFile("test-multi-1.pdf");
-        MockMultipartFile file2 = createTestPdfFile("test-multi-2.pdf");
-
-        // Call deprecated sync extraction endpoint with multiple files
-        MvcResult result = mockMvc.perform(multipart("/api/v1/business-drivers/extract/upload")
-                .file(file1)
-                .file(file2))
-            .andExpect(status().isOk())
-            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_PLAIN))
-            .andReturn();
-
-        // Verify response
-        String response = result.getResponse().getContentAsString();
-        assertThat(response).isNotNull();
-        assertThat(response).isNotEmpty();
-
-        System.out.println("=== Multi-file Extraction Result (Deprecated Endpoint) ===");
-        System.out.println("Total Length: " + response.length() + " characters");
-    }
-
-    @Test
-    void testExtractionWithNoFiles() throws Exception {
-        // Call deprecated endpoint without files
-        mockMvc.perform(multipart("/api/v1/business-drivers/extract/upload"))
-            .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void testExtractionWithTooManyFiles() throws Exception {
-        // Test deprecated endpoint with too many files
-        // Create 6 test files (exceeds limit of 5)
-        MockMultipartFile[] files = new MockMultipartFile[6];
-        for (int i = 0; i < 6; i++) {
-            files[i] = createTestPdfFile("test-too-many-" + i + ".pdf");
-        }
-
-        // Call deprecated endpoint with too many files
-        var request = multipart("/api/v1/business-drivers/extract/upload");
-        for (MockMultipartFile file : files) {
-            request = request.file(file);
-        }
-
-        mockMvc.perform(request)
-            .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void testExtractionWithEmptyFile() throws Exception {
-        // Test deprecated endpoint with empty file
-        MockMultipartFile emptyFile = new MockMultipartFile(
-            "files",
-            "empty.pdf",
-            "application/pdf",
-            new byte[0]  // Empty content
-        );
-
-        // Call deprecated endpoint with empty file - should be rejected
-        mockMvc.perform(multipart("/api/v1/business-drivers/extract/upload")
-                .file(emptyFile))
-            .andExpect(status().isBadRequest())
-            .andExpect(content().string(org.hamcrest.Matchers.containsString("Empty file not allowed")));
-    }
-
-    // ========== New API Tests (File Upload + Extraction Decoupled) ==========
 
     @Test
     void testFileUploadEndpoint() throws Exception {
