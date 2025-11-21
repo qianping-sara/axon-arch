@@ -2,6 +2,18 @@
 
 AI-assisted Architecture Tradeoff Analysis Method (ATAM) evaluation platform.
 
+## 📋 Project Overview
+
+ATAM Copilot is an intelligent architecture decision support platform that leverages generative AI to assist architects in executing the ATAM process, identifying architecture risks and tradeoff points.
+
+### Key Features
+
+- 🤖 **AI-Assisted Analysis**: Automated extraction of business drivers, architecture patterns, and risks
+- 🏗️ **Agentic Architecture**: Four-layer model (L3: Orchestration, L2: Agents, L1: Tools, L0: Persistence)
+- 🔄 **Human-in-the-Loop**: AI generates drafts, humans review and refine
+- 📊 **Structured Outputs**: Standardized ATAM artifacts with JSON schema validation
+- 🔌 **Extensible**: Easy to add new agents and tools
+
 ---
 
 ## ⚠️ IMPORTANT: This Repository Contains ONLY Source Code
@@ -17,18 +29,6 @@ AI-assisted Architecture Tradeoff Analysis Method (ATAM) evaluation platform.
 **See `CONTRIBUTING.md` for detailed guidelines.**
 
 ---
-
-## 📋 Project Overview
-
-ATAM Copilot is an intelligent architecture decision support platform that leverages generative AI to assist architects in executing the ATAM process, identifying architecture risks and tradeoff points.
-
-### Key Features
-
-- 🤖 **AI-Assisted Analysis**: Automated extraction of business drivers, architecture patterns, and risks
-- 🏗️ **Agentic Architecture**: Four-layer model (L3: Orchestration, L2: Agents, L1: Tools, L0: Persistence)
-- 🔄 **Human-in-the-Loop**: AI generates drafts, humans review and refine
-- 📊 **Structured Outputs**: Standardized ATAM artifacts with JSON schema validation
-- 🔌 **Extensible**: Easy to add new agents and tools
 
 ## 🚀 Quick Start
 

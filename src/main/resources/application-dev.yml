@@ -21,20 +21,25 @@ spring:
       enabled: true
       path: /h2-console
 
-  # Disable Spring AI auto-configuration for now (until we add OpenAI API key)
-  autoconfigure:
-    exclude:
-      - org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
+  # Spring AI Google GenAI Configuration (Gemini Developer API)
+  ai:
+    google:
+      genai:
+        # Gemini Developer API (API Key authentication)
+        # IMPORTANT: Set GOOGLE_API_KEY environment variable
+        api-key: ${GOOGLE_API_KEY}
+        chat:
+          options:
+            model: gemini-2.5-flash
+            temperature: 0.3
+            max-output-tokens: 8192
 
-# Spring AI Configuration (optional - only if using AI features)
-#  ai:
-#    openai:
-#      api-key: ${OPENAI_API_KEY}
-#      chat:
-#        options:
-#          model: gpt-4
-#          temperature: 0.7
-#          max-tokens: 2000
+  # File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 50MB
 
 # Logging
 logging:

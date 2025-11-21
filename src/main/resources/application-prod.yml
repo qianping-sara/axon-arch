@@ -21,15 +21,25 @@ spring:
     console:
       enabled: false
 
-# Spring AI Configuration
-#  ai:
-#    openai:
-#      api-key: ${OPENAI_API_KEY}
-#      chat:
-#        options:
-#          model: gpt-4
-#          temperature: 0.5
-#          max-tokens: 2000
+  # Spring AI Google GenAI Configuration (Vertex AI)
+  ai:
+    google:
+      genai:
+        # Vertex AI (Google Cloud project authentication)
+        project-id: ${GOOGLE_CLOUD_PROJECT}
+        location: ${GOOGLE_CLOUD_LOCATION:us-central1}
+        chat:
+          options:
+            model: gemini-2.5-flash  # ❌ Vertex AI暂不支持Gemini 3.0
+            temperature: 0.3
+            max-output-tokens: 8192
+
+  # File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 50MB
 
 # Logging
 logging:
