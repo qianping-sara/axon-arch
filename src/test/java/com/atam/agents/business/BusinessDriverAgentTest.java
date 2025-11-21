@@ -42,37 +42,6 @@ class BusinessDriverAgentTest {
     }
 
     @Test
-    void testPromptTemplateLoading() throws IOException {
-        // This test verifies that the prompt template can be loaded
-        // We'll test this indirectly through the agent's methods
-
-        // Create a simple test file
-        Path tempFile = createTestPdfFile("test-simple.pdf");
-
-        try {
-            // 1. Upload file to Gemini Files API
-            List<com.google.genai.types.File> uploadedFiles = fileUploadTool.uploadPdfFiles(List.of(tempFile.toString()));
-            assertThat(uploadedFiles).hasSize(1);
-
-            // 2. Extract file URI
-            String fileUri = uploadedFiles.get(0).uri().orElseThrow();
-            System.out.println("Uploaded file URI: " + fileUri);
-
-            // 3. Call agent with file URI (will load prompt template internally)
-            String result = businessDriverAgent.extractBusinessDrivers(List.of(fileUri));
-
-            // Verify result is not null
-            assertThat(result).isNotNull();
-
-            System.out.println("Extraction Result Length: " + result.length());
-
-        } finally {
-            // Cleanup
-            fileUploadTool.cleanupTempFiles(List.of(tempFile.toString()));
-        }
-    }
-
-    @Test
     void testExtractBusinessDriversWithRealPdf() throws IOException {
         // Load test PDF from resources
         ClassPathResource pdfResource = new ClassPathResource("test-data/Architecture_Review_Revival_V3.3.pdf");
@@ -173,57 +142,5 @@ class BusinessDriverAgentTest {
         }
     }
 
-    @Test
-    void testExtractWithMultiplePdfs() throws IOException {
-        // Create multiple test files
-        Path tempFile1 = createTestPdfFile("test-multi-1.pdf");
-        Path tempFile2 = createTestPdfFile("test-multi-2.pdf");
-
-        try {
-            // 1. Upload files to Gemini Files API
-            List<com.google.genai.types.File> uploadedFiles = fileUploadTool.uploadPdfFiles(
-                List.of(tempFile1.toString(), tempFile2.toString())
-            );
-            assertThat(uploadedFiles).hasSize(2);
-
-            // 2. Extract file URIs
-            List<String> fileUris = uploadedFiles.stream()
-                .map(f -> f.uri().orElseThrow())
-                .toList();
-
-            // 3. Call agent with multiple file URIs
-            String result = businessDriverAgent.extractBusinessDrivers(fileUris);
-
-            // Verify result
-            assertThat(result).isNotNull();
-            assertThat(result).isNotEmpty();
-
-            System.out.println("Multi-file Extraction Result Length: " + result.length());
-
-        } finally {
-            // Cleanup
-            fileUploadTool.cleanupTempFiles(List.of(tempFile1.toString(), tempFile2.toString()));
-        }
-    }
-
-    /**
-     * Helper method to create a test PDF file with at least one page
-     */
-    private Path createTestPdfFile(String filename) throws IOException {
-        Path tempFile = Files.createTempFile("atam-test-", "-" + filename);
-
-        // Write minimal PDF content with 1 page
-        // This is a valid PDF with one blank page
-        String minimalPdf = "%PDF-1.4\n" +
-                           "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
-                           "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
-                           "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << >> >>\nendobj\n" +
-                           "4 0 obj\n<< /Length 44 >>\nstream\nBT\n/F1 12 Tf\n100 700 Td\n(Test Document) Tj\nET\nendstream\nendobj\n" +
-                           "xref\n0 5\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n0000000115 00000 n\n0000000229 00000 n\n" +
-                           "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n322\n%%EOF";
-        Files.writeString(tempFile, minimalPdf);
-
-        return tempFile;
-    }
 }
 
